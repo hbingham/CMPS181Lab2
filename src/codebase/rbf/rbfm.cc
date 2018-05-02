@@ -451,15 +451,63 @@ void RecordBasedFileManager::setRecordAtOffset(void *page, unsigned offset, cons
 }
 RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid)
 {
+    /**
+    
+    Get:
+        Page
+        Page Header
+        Slot record data
+        -Check to see if record is valid for deletion
 
+    **/
+    void *pageData = malloc(PAGE_SIZE);
+    unsigned readPage = fileHandle.readPage(rid.pageNum, pageData);
+    RC returnCode;
+
+    // Gets the slot directory record entry data
+    SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
+
+    if(readPage != SUCCESS)
+    {
+        return RBFM_READ_FAILED;
+    }
+    if(recordEntry.length == 0 && recordEntry.offset == 0)
+    {
+        free(pageData);
+        return RBFM_SLOT_DN_EXIST;
+    }
+    else if(recordEntry.offset <= 0)
+    {
+        RID thisRID;
+
+        thisRID.slotNum = -recordEntry.offset;
+        thisRID.pageNum = recordEntry.length;
+
+        returnCode = deleteRecord(fileHandle, recordDescriptor, thisRID);
+        if(!returnCode)
+        {
+            free(pageData);
+            return returnCode;
+        }
+    }
+    else
+    {
+            memset(((char*) page + sizeof(SlotDirectoryHeader) + rid.slotNum * sizeof(SlotDirectoryRecordEntry)), 0, sizeof(SlotDirectoryRecordEntry));
+            //fillHoles
+    }
+
+    returnCode = fileHandle.writePage(rid.pageNum, pageData);
+    free(pageData);
+
+    return returnCode;
 }
 
   // Assume the RID does not change after an update
 RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid)
 {
-
+    return -1;
 }
 RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data)
 {
-    
+    return -1;
 }
