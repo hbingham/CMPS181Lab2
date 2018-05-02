@@ -449,3 +449,17 @@ void RecordBasedFileManager::setRecordAtOffset(void *page, unsigned offset, cons
         header_offset += sizeof(ColumnOffset);
     }
 }
+RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid)
+{
+
+}
+
+  // Assume the RID does not change after an update
+RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid)
+{
+
+}
+RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data)
+{
+    
+}
