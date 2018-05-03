@@ -458,7 +458,6 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
         Page Header
         Slot record data
         -Check to see if record is valid for deletion
-
     **/
     void *pageData = malloc(PAGE_SIZE);
     unsigned readPage = fileHandle.readPage(rid.pageNum, pageData);
@@ -471,6 +470,42 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
     {
         return RBFM_READ_FAILED;
     }
+     int status;
+     // 1 means the slot has already been deleted, or has no values
+     // 2 means that pages have been moved.
+
+    if(recordEntry.length == 0 && recordEntry.offset == 0)
+    {
+        status = 1;
+    }
+    else if(recordEntry.offset <= 0)
+    {
+        status = 2;
+    }
+    switch(status)
+    {
+        case 1: free(pageData);
+                return RBFM_SLOT_DN_EXIST;
+                break;
+        case 2: RID thisRID;
+
+                thisRID.slotNum = -recordEntry.offset;
+                thisRID.pageNum = recordEntry.length;
+
+                returnCode = deleteRecord(fileHandle, recordDescriptor, thisRID);
+                if(!returnCode)
+                {
+                     free(pageData);
+                     return returnCode;
+                }
+                break;
+        default:    memset(((char*) page + sizeof(SlotDirectoryHeader) + rid.slotNum * sizeof(SlotDirectoryRecordEntry)), 0, sizeof(SlotDirectoryRecordEntry));
+        //memset:: set the bytes of the block that are the size of a SlotDirectoryRecordEntry to 0, starting at page + SlotDirectoryHeader + slotNum * the size of a SlotDirectoryRecordEntry
+        //fillHoles gets called here.
+                    break;
+    }
+
+/*
     if(recordEntry.length == 0 && recordEntry.offset == 0)
     {
         free(pageData);
@@ -495,6 +530,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
             memset(((char*) page + sizeof(SlotDirectoryHeader) + rid.slotNum * sizeof(SlotDirectoryRecordEntry)), 0, sizeof(SlotDirectoryRecordEntry));
             //fillHoles
     }
+*/
 
     returnCode = fileHandle.writePage(rid.pageNum, pageData);
     free(pageData);
@@ -509,5 +545,69 @@ RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Att
 }
 RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data)
 {
+    char *pageData = (char*)malloc(PAGE_SIZE);
+    // Checks if the specific slot id exists in the page
+    SlotDirectoryHeader slotHeader = getSlotDirectoryHeader(pageData);
+    // Gets the slot directory record entry data
+    SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
+
+
+    //basic checks, wether malloc was successful and if the slot id exists
+    
+    if(pageData == NULL)
+    {
+        return RBFM_MALLOC_FAILED;
+    }
+    else if(fileHandle.readPage(rid.pageNum, pageData) != SUCCESS)
+    {
+        free(pageData);
+        return RBFM_READ_FAILED;
+    }
+    else if(slotHeader.recordEntriesNumber < rid.slotNum)
+    {
+        return RBFM_SLOT_DN_EXIST;
+    }
+
+    if(recordEntry.length == 0 && recordEntry.offset == 0)
+    {
+        free(pageData);
+        return RBFM_READ_FAILED;
+    }
+    else if(recordEntry.offset <= 0)
+    {
+        RID thisRID;
+
+        thisRID.slotNum = -recordEntry.offset;
+        thisRID.pageNum = recordEntry.length;
+
+        free(pageData);
+        return readAttribute(fileHandle, recordDescriptor, thisRID, attributeName, data);
+    }
+
+    /**********************************************************************************************************
+    Get offset to record
+    unsigned offset = recordEntry.offset;
+    // Get index and type of attribute
+    auto pred = [&](Attribute a) {return a.name == attributeName;};
+    auto iterPos = find_if(recordDescriptor.begin(), recordDescriptor.end(), pred);
+    unsigned index = distance(recordDescriptor.begin(), iterPos);
+    if (index == recordDescriptor.size())
+        return RBFM_NO_SUCH_ATTR;
+    AttrType type = recordDescriptor[index].type;
+    // Write attribute to data
+    getAttributeFromRecord(pageData, offset, index, type, data);
+    free(pageData);
+return SUCCESS;
+
+
+
+
+
+    *************************************************************************************************************/
+
+
+
+
+
     return -1;
 }

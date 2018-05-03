@@ -69,6 +69,12 @@ protected:
 
 private:
   static RelationManager *_rm;
+
+  PagedFileManager *pfm;
+  RecordBasedFileManager *rbfm;
+
+  vector<Attribute> table;
+  vector<Attribute> column;
 };
 
 #endif
