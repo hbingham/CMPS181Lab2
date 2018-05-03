@@ -46,7 +46,7 @@ RelationManager::RelationManager()
     attr.name = "table-id";
     attr.type = TypeInt;
     attr.length = 4;
-    table.push_back(attr);
+    column.push_back(attr);
     
     attr.name = "column-name";
     attr.length = 50;
