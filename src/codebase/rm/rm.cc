@@ -82,7 +82,11 @@ RC RelationManager::createCatalog()
 
 RC RelationManager::deleteCatalog()
 {
-    return -1;
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+    RC returnCode;
+    returnCode = rbfm->destroyFile("Tables.t");
+    rbfm->destroyFile("Columns.t");
+    return 0;
 }
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
@@ -94,11 +98,18 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     //Initialized this in the constructor, not sure if I need it again?
     //RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
 
-    returnCode = rbfm->createFile(getFileName(tableName));
+    returnCode = rbfm->createFile(tableName + ".t");
     if(returnCode)
     {
       return returnCode;
     }
+
+    thisReturnCode = rbfm->openFile("Tables.t", fileHandle);
+    if(thisReturnCode)
+    {
+      return thisReturnCode;
+    }
+
 
 
     return -1;
