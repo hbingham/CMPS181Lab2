@@ -457,9 +457,117 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
   // Assume the RID does not change after an update
 RC RecordBasedFileManager::updateRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, const RID &rid)
 {
+//read in page, check that it works
+   void *pageData = malloc(PAGE_SIZE);
+   if (fileHandle.readPage(rid.pageNum, pageData))
+   {
+      free(pageData);
+      return RBFM_READ_FAILED;
+   }
+    // Checks if the specific slot id exists in the page
+    SlotDirectoryHeader slotHeader = getSlotDirectoryHeader(pageData);
 
+    if(slotHeader.recordEntriesNumber <= rid.slotNum)
+   {
+      free(pageData);
+      return RBFM_SLOT_DN_EXIST;
+   }
+   SlotDirectoryRecordEntry entry = getSlotDirectoryRecordEntry(pageData, rid.slotNum);
+   unsigned recSize = getRecordSize(recordDescriptor, data);
+   if(recSize == entry.length)
+   {
+      setRecordAtOffset(pageData, entry.offset, recordDescriptor, data);
+   }
+   else if(recSize < entry.length)
+   {
+      entry.length = recSize;
+      setRecordAtOffset(pageData, entry.offset, recordDescriptor, data);
+      setSlotDirectoryRecordEntry(pageData, rid.slotNum, entry);
+      fillHoles(pageData);
+   }
+   else
+   {
+      unsigned freeSpace = getPageFreeSpaceSize(pageData);
+      if(freeSpace + entry.length <= recSize)
+      {
+//Set offset & length to 0 to reorganize page without the current record
+         entry.offset = 0;
+         entry.length = 0;
+         setSlotDirectoryRecordEntry(pageData, rid.slotNum, entry);
+         fillHoles(pageData);
+//Get free space offset, fix up recordEntry data
+         slotHeader = getSlotDirectoryHeader(pageData);
+         entry.length = recSize;
+         entry.offset = slotHeader.freeSpaceOffset - recSize;
+         slotHeader.freeSpaceOffset = entry.offset;
+//Set the datas
+         setRecordAtOffset(pageData, entry.offset, recordDescriptor, data);
+         setSlotDirectoryRecordEntry(pageData, rid.slotNum, entry);
+         setSlotDirectoryHeader(pageData, slotHeader);
+      }
+      else
+      {
+         RID insertRid;
+         RC rc = insertRecord(fileHandle, recordDescriptor, data, insertRid);
+         if (rc != SUCCESS)
+         {
+            free(pageData);
+            return rc;
+         }
+         entry.length = insertRid.pageNum;
+         entry.offset = -insertRid.slotNum;
+         setSlotDirectoryRecordEntry(pageData, rid.slotNum, entry);
+         fillHoles(pageData);
+      }
+   }
+   free(pageData);
+   return fileHandle.writePage(rid.pageNum, pageData);
 }
+
 RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data)
 {
     
+}
+
+void RecordBasedFileManager::fillHoles(void *page)
+{
+   SlotDirectoryHeader header = getSlotDirectoryHeader(page);
+   vector<SlotDirectoryRecordEntry> entries;
+   vector<int> recordSlots;
+   for (unsigned i = 0; i < header.recordEntriesNumber; i++)
+   {
+      SlotDirectoryRecordEntry recordEntry = getSlotDirectoryRecordEntry(page, i);
+      entries.push_back(recordEntry);
+      recordSlots.push_back(i);
+   }
+   int currInd;
+   int currOffset = PAGE_SIZE;
+   while(entries.size() > 0)
+   {
+      currInd = maxEntryIndex(entries);
+      SlotDirectoryRecordEntry recordEntry = entries.at(currInd);
+      currOffset -= recordEntry.length;
+      if (recordEntry.length > 0)memmove((char*)page + currOffset,  (char*)page + recordEntry.offset, recordEntry.length);
+      entries.erase(entries.begin() + currInd);
+      recordSlots.erase(recordSlots.begin() + currInd);
+   }
+    header.freeSpaceOffset = currOffset;
+    setSlotDirectoryHeader(page, header);
+}
+
+//DONT PASS AN EMPTY VECTOR
+int RecordBasedFileManager::maxEntryIndex(vector<SlotDirectoryRecordEntry> &entries)
+{
+   int max = 0;
+   int maxOffset = -1;
+   for(unsigned i = 0; i < entries.size(); i++)
+   {
+      int currOffset = entries.at(i).offset;
+      if(currOffset > maxOffset)
+      {
+         max = i;
+         maxOffset = currOffset;
+      }
+   }
+   return max;
 }
