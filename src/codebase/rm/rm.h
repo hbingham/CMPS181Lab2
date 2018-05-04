@@ -20,6 +20,10 @@ public:
   // "data" follows the same format as RelationManager::insertTuple()
   RC getNextTuple(RID &rid, void *data) { return RM_EOF; };
   RC close() { return -1; };
+  friend class RelationManager;
+private:
+  RBFM_ScanIterator RBFMscanIterator;
+  FileHandle fileHandle;
 };
 
 
@@ -77,8 +81,17 @@ private:
   PagedFileManager *pfm;
   RecordBasedFileManager *rbfm;
 
+  int tableCounter;
+
   vector<Attribute> table;
   vector<Attribute> column;
+
+  bool doesExist(string fileName);
+
+
+
+  RC load();
+
 };
 
 #endif

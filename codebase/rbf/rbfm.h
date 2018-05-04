@@ -4,20 +4,9 @@
 #include <string>
 #include <vector>
 #include <climits>
-#include <inttypes.h>
+#include <math.h>
+
 #include "../rbf/pfm.h"
-
-#define INT_SIZE                4
-#define REAL_SIZE               4
-#define VARCHAR_LENGTH_SIZE     4
-
-#define RBFM_CREATE_FAILED 1
-#define RBFM_MALLOC_FAILED 2
-#define RBFM_OPEN_FAILED   3
-#define RBFM_APPEND_FAILED 4
-#define RBFM_READ_FAILED   5
-#define RBFM_WRITE_FAILED  6
-#define RBFM_SLOT_DN_EXIST 7
 
 using namespace std;
 
@@ -50,25 +39,11 @@ typedef enum { EQ_OP = 0, // no condition// =
            NO_OP	   // no condition
 } CompOp;
 
-// Slot directory headers for page organization
-// See chapter 9.6.2 of the cow book or lecture 3 slide 17 for more information
-typedef struct SlotDirectoryHeader
-{
-    uint16_t freeSpaceOffset;
-    uint16_t recordEntriesNumber;
-} SlotDirectoryHeader;
+enum DataType {
+	API = 0,
+	RECORD
+};
 
-typedef struct SlotDirectoryRecordEntry
-{
-    uint32_t length; 
-    int32_t offset;
-} SlotDirectoryRecordEntry;
-
-typedef SlotDirectoryRecordEntry* SlotDirectory;
-
-typedef uint16_t ColumnOffset;
-
-typedef uint16_t RecordLength;
 /********************************************************************************
 The scan iterator is NOT required to be implemented for the part 1 of the project 
 ********************************************************************************/
@@ -92,35 +67,34 @@ public:
   // Never keep the results in the memory. When getNextRecord() is called, 
   // a satisfying record needs to be fetched from the file.
   // "data" follows the same format as RecordBasedFileManager::insertRecord().
-  RC initialize(FileHandle &fileHandle,
-                      const vector<Attribute> &recordDescriptor,
-                      const CompOp compOp,
-                      const void *value,
-                      const vector<string> &attributeNames,
-                      const string &conditionAttribute);
-  RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
-  RC close() { return -1; };
-  friend class RecordBasedFileManager;
-  
+  RC getNextRecord(RID &rid, void *data);
+  bool hasNextRecord();
+  RC createNewScanIterator(FileHandle &fileHandle,
+	      const vector<Attribute> &recordDescriptor,
+	      const string &conditionAttribute,
+	      const CompOp compOp,                  // comparision type such as "<" and "="
+	      const void *value,                    // used in the comparison
+	      const vector<string> &attributeNames);
+  RC getNextProperRID(RID &rid);
+
+  bool dataComparator(AttrType dataType, void* leftOperator, const void* rightOperator, const CompOp compOp);
+  RC close();
+
+private :
+  bool getData(RID& rid, void* data);
+
+
 private:
-  unsigned currentpage;
-  unsigned currentslot;
-  const void *compVal;
-  AttrType compValtype;
-  char compValNum;
-  FileHandle fileH;
-  vector<AttrType> writeTypes;
-  vector<char> writeNums;
-  char *page;
-  char *end pointer;
-  SlotDirectoryHeader slotDir;
-  CompOp op;
-  
-  bool compare(void *at, const void *compVal, AttrType type, CompOp op);
-  RC pull(char *rec, void *at, short atNum, AttrType type, int &atLen);
-  RC push(char *rec, void *data, vector<AttrType> atTypes, vector<short> atNums);
-  
-  
+  FileHandle fileHandle;
+  vector<Attribute> recordDescriptor;
+  Attribute conditionAttribute;
+  CompOp compOp;
+  vector<string> attributeNames;
+  const void* value;
+  RID nextRID;
+  RID finalRID;
+  PageNum currentPageNum;
+  byte currentPageRecordNum;
 };
 
 
@@ -150,7 +124,7 @@ public:
   //  3) For Int and Real: use 4 bytes to store the value;
   //     For Varchar: use 4 bytes to store the length of characters, then store the actual characters.
   //  !!! The same format is used for updateRecord(), the returned data of readRecord(), and readAttribute().
-  // For example, refer to the Q8 of the Project1 document.
+  // For example, refer to the Q8 of Project 1 wiki page.
   RC insertRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const void *data, RID &rid);
 
   RC readRecord(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);
@@ -172,8 +146,6 @@ IMPORTANT, PLEASE READ: All methods below this comment (other than the construct
 
   RC readAttribute(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, const string &attributeName, void *data);
 
-int maxEntryIndex(vector<SlotDirectoryRecordEntry> &entries);
-void fillHoles(void *page);
   // Scan returns an iterator to allow the caller to go through the results one by one. 
   RC scan(FileHandle &fileHandle,
       const vector<Attribute> &recordDescriptor,
@@ -183,6 +155,45 @@ void fillHoles(void *page);
       const vector<string> &attributeNames, // a list of projected attributes
       RBFM_ScanIterator &rbfm_ScanIterator);
 
+  /* My Methods*/
+public:
+  RC readRecordInStoredFormat(FileHandle &fileHandle, const vector<Attribute> &recordDescriptor, const RID &rid, void *data);  //read the data base on the offset position information
+
+  void readDataContent(void* data, int startOffset, int endOffset, void* value);  //read the data base on the offset position information
+  void loadSlotItemInfos(const void *data, int slotIndex, byte& startSlotIndex, byte& occupiedSlotNum); // load the slot item information from slot directory
+  void insertSlotItemInfo(const void *pageData, byte startSlotIndex, byte occupiedSlotNum); // append the slot item information at the tail of page
+
+  unsigned calculateRecordLength(const vector<Attribute> &recordDescriptor, const void *data, DataType type);
+  RC printRecordInStoreFormat(const vector<Attribute> &recordDescriptor, const void *recordData);
+
+  /* added in the 2nd project */
+  //startSlotIndex, the start slot index of the data
+  //
+  RC moveDataRight(const void* pageData, byte fromWhereSlotIndex, byte dataLength, byte toWhereSlotIndex);
+  RC moveDataLeft(const void* pageData, byte fromWhereSlotIndex, byte dataLength, byte toWhereSlotIndex);
+
+  RC getRealRIDFromIndex(RID &realRID, void* pageData, const RID &indexRID);
+  RC updateRIDList(const void* pageData, byte updateStartIndex, byte changeSize);
+
+  RC readAttributesFromRecord(void* recordDataInStoredFormat, const vector<Attribute> &recordDescriptor,
+			const vector<string> &attributeName, void *data);
+
+//  RC  RecordBasedFileManager::assembleRecordIntoAttributesData(void* recordData, void *data,
+//  		vector<Attribute> recordDescriptor, vector<string> attributeNames, DataType recordType);
+
+public:
+  void readInteger(void* data, int offset, int& value);
+  void readFloat(void* data, int offset, float& value);
+  void readVarchar(void* data, int offset, int& valueLength, char* value);
+  void readInteger(void* data, int& value); //override
+  void readFloat(void* data, float& value); //override
+  void readVarchar(void* data, int& valueLength, char* value); //override
+
+  void convertAPIData2StoreFormat(const vector<Attribute> &recordDescriptor, const void *APIData, void* recordData);
+  void convertStoreFormat2APIData(const vector<Attribute> &recordDescriptor, const void *recordData, void* APIData);
+
+  byte locateInsertSlotLocation(FileHandle &fileHandle, byte occupiedSlotNum, RID &rid);
+
 public:
 
 protected:
@@ -191,28 +202,7 @@ protected:
 
 private:
   static RecordBasedFileManager *_rbf_manager;
-  static PagedFileManager *_pf_manager;
-
-  // Private helper methods
-
-  void newRecordBasedPage(void * page);
-
-  SlotDirectoryHeader getSlotDirectoryHeader(void * page);
-  void setSlotDirectoryHeader(void * page, SlotDirectoryHeader slotHeader);
-
-  SlotDirectoryRecordEntry getSlotDirectoryRecordEntry(void * page, unsigned recordEntryNumber);
-  void setSlotDirectoryRecordEntry(void * page, unsigned recordEntryNumber, SlotDirectoryRecordEntry recordEntry);
-
-  unsigned getPageFreeSpaceSize(void * page);
-  unsigned getRecordSize(const vector<Attribute> &recordDescriptor, const void *data);
-
-  int getNullIndicatorSize(int fieldCount);
-  bool fieldIsNull(char *nullIndicator, int i);
-
-  void setRecordAtOffset(void *page, unsigned offset, const vector<Attribute> &recordDescriptor, const void *data);
-  void getRecordAtOffset(void *record, unsigned offset, const vector<Attribute> &recordDescriptor, void *data);
-
-  bool attrExists(const vector<Attribute> &recordDescriptor, const string &attributeName);
+  PagedFileManager * _pf_manager;
 };
 
 #endif

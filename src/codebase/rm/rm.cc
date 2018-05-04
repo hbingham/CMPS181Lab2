@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include<string.h>
 #include "rm.h"
+#include <iostream>
 
 //tableEntry includes 2 ints(8): TID & sysFlag
 //2 varchars(108): fName, tName,  & 1 nullByte(1)
@@ -74,6 +75,18 @@ RelationManager::RelationManager() : nextTid(1)
     attr.length = 4;
     attr.type = TypeInt;
     column.push_back(attr);
+
+    if (doesExist("Tables.tbl")) 
+    {
+        load();
+    }
+    else 
+    {
+      createTable("Tables", table, "System");
+      createTable("Columns", column, "System");
+    }
+
+    
     
 }
 
@@ -116,11 +129,8 @@ RC RelationManager::deleteCatalog()
 
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
-
     RC rc;
     FileHandle fileHandle;
-    //Initialized this in the constructor, not sure if I need it again?
-    //RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
 
     rc = rbfm->createFile(tableName + ".t");
     if(rc)
@@ -132,7 +142,7 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
     rc = saveTableColumns(tableId, attrs);
 
     this->nextTid++;
-    return -1;
+    return 0;
 }
 
 RC RelationManager::deleteTable(const string &tableName)
@@ -186,7 +196,98 @@ RC RelationManager::scan(const string &tableName,
 {
     return -1;
 }
+RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
+{
+    return rbfm_scanIterator.getNextRecord(rid, data);
+}
 
+RC RM_ScanIterator::close()
+{
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+    rbfm->closeFile(fileHandle);
+    return SUCCESS;
+}
+RC RelationManager::load() 
+{
+
+  RM_ScanIterator rmScanIterator;
+  vector <string> attributeName;
+  RID thisRID;
+
+  //tableID
+  attributeName.push_back(table[0].name);
+  //tableName
+  attributeName.push_back(table[1].name);
+
+  scan("Tables", table[0].name, NO_OP, NULL, attributeNames, rmScanIterator);
+
+  //Max table record size.
+  char *data = (char*) malloc(768);
+  char *BOF = data;
+
+  int maxTable = 0;
+  int tableID = 0;
+
+  while(rmScanIterator.getNextTuple(thisRID, data) != RM_EOF) 
+  {
+    memcpy(&tableID, data, sizeof(int));
+
+    int tableNameLength;
+    data = data + sizeof(int); //jump the length
+    memcpy(&tableNameLength, data, sizeof(int));
+
+    data = data + sizeof(int);
+    string tableName = string(data, tableNameLength);
+
+    if(tableId > maxTable)
+      maxTable = tableId;
+
+    map<int, RID> * tableIDToRidMap = new map<int, RID> ();
+    (*tableIDToRidMap)[tableId] = rid;
+
+    tablesMap[tableName] = tableIDToRidMap;
+    data = BOF;
+  }
+
+  tableCounter = maxTableID + 1; //get the max and add 1
+  rmScanIterator.close();
+
+  attributeName.clear();
+  attributeName.push_back(column[0].name); //table id
+  attributeName.push_back(column[4].name); //column position
+  scan("Columns", column[0].name, NO_OP, NULL, attributeName, rmScanIterator);
+
+  int columnPos;
+  while (rmScanIterator.getNextTuple(thisRID, data) != RM_EOF) 
+  {
+    memcpy(&tableId, data, sizeof(int));
+
+    data = data + sizeof(int);
+    memcpy(&columnPos, data, sizeof(int));
+
+    if (columnsMap.find(tableId) != columnsMap.end()) {
+      (*columnsMap[tableId])[columnPosition] = rid;
+    } else {
+      map<int, RID> * colEntryMap = new map<int, RID> ();
+      (*colEntryMap)[columnPosition] = rid;
+      (columnsMap[tableId]) = colEntryMap;
+    }
+
+    data = beginOfData;
+  }
+  rmsi.close();
+
+  attributeNames.clear();
+
+  return 0;
+}
+
+//returns true if the file exists, else returns false.
+bool RelationManager::doesExist(string fileName)
+{
+  struct stat buf;
+  return (stat(fileName.c_str(), &buf) == 0);
+}
 
 RC RelationManager::saveTable(int tableId,const string &name, int sysFlag)
 {
