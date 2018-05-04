@@ -92,8 +92,35 @@ public:
   // Never keep the results in the memory. When getNextRecord() is called, 
   // a satisfying record needs to be fetched from the file.
   // "data" follows the same format as RecordBasedFileManager::insertRecord().
+  RC initialize(FileHandle &fileHandle,
+                      const vector<Attribute> &recordDescriptor,
+                      const CompOp compOp,
+                      const void *value,
+                      const vector<string> &attributeNames,
+                      const string &conditionAttribute);
   RC getNextRecord(RID &rid, void *data) { return RBFM_EOF; };
   RC close() { return -1; };
+  friend class RecordBasedFileManager;
+  
+private:
+  unsigned currentpage;
+  unsigned currentslot;
+  const void *compVal;
+  AttrType compValtype;
+  char compValNum;
+  FileHandle fileH;
+  vector<AttrType> writeTypes;
+  vector<char> writeNums;
+  char *page;
+  char *end pointer;
+  SlotDirectoryHeader slotDir;
+  CompOp op;
+  
+  bool compare(void *at, const void *compVal, AttrType type, CompOp op);
+  RC pull(char *rec, void *at, short atNum, AttrType type, int &atLen);
+  RC push(char *rec, void *data, vector<AttrType> atTypes, vector<short> atNums);
+  
+  
 };
 
 

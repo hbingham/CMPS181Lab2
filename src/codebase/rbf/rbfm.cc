@@ -730,3 +730,147 @@ int RecordBasedFileManager::maxEntryIndex(vector<SlotDirectoryRecordEntry> &entr
    }
    return max;
 }
+
+RC RecordBasedFileManager::scan(FileHandle &fileHandle, const vector<Attribute>
+&recordDescriptor, const string &conditionAttribute, const CompOp
+compOp, const void *value, const vector<string> &attributeNames,
+RBFM_ScanIterator &rbfm_ScanIterator){
+	return -1;
+}
+
+RBFM_ScanIterator::RBFM_ScanIterator() {
+	currentpage = 0;
+	currentslot = 0;
+	compVal = NULL;
+	compValtype = TypeInt;
+	compValNum = 0;
+	writeTypes.clear();
+	writeNums.clear();
+	page = NULL;
+    endPointer = NULL;
+	op = NO_OP;
+}
+
+RBFM_ScanIterator::~RBFM_ScanIterator(){}
+
+RC RBFM_ScanIterator::initialize(FileHandle &fileHandle,
+                                 const vector<Attribute> &recordDescriptor,
+                                 const string &conditionAttribute,
+                                 const CompOp compOp,
+                                 const void *value,
+                                 const vector<string> &attributeNames) {
+	currentpage = 0;
+	currentslot = 0;
+	compval = value;
+	op = compOp;
+	fileH = fileHandle;
+	page = (char *)malloc(PAGE_SIZE);
+	fileH.readPage(pageNum, page);
+	endPointer = page + PAGE_SIZE;
+	slotDir = (SlotDirectoryHeader *)(page);
+	//find the place and type of the comparison value and stored values
+	for(char a = 0, b = 0; a < recordDescriptor.size() && j < attributeNames.size(); i++) {
+		Attribute i = recordDescriptor[i];
+		if(i.name.compare(conditionAttribute)==0){
+			compValtype = i.type;
+			compValNum = (char)a;
+		}
+		if(i.name.compare(attributeNames[b])==0){
+			writeTypes.push_back(i.type);
+			writeNums.push_back((char)a);
+			b++;
+		}	
+	}
+}
+
+bool RBFM_ScanIterator::compare(void *at, const void *compVal, AttrType type, CompOp op){
+	bool result = true;
+	if(compVal == NULL) 
+		return true;
+	if(type == TypeInt){
+		int attribute = *(int *)at;
+		int comp = *(int *)compVal;
+		
+		if(op == EQ_OP){
+			result = attribute == comp;
+		}
+		else if(op == LT_OP){
+			result = attribute < comp;
+		}
+		else if(op == LE_OP){
+			result = attribute <= comp;			
+		}
+		else if(op == GT_OP){
+			result = attribute > comp;			
+		}
+		else if(op == GE_OP){
+			result = attribute >= comp;			
+		}
+		else if(op == NE_OP){
+			result = attribute != comp;			
+		}
+		else if(op == NO_OP){
+			result = true;			
+		}
+	}
+	else if(type == TypeReal){
+		float attribute = *(float *)at;
+		float comp = *(float *)compVal;
+		
+		if(op == EQ_OP){
+			result = attribute == comp;
+		}
+		else if(op == LT_OP){
+			result = attribute < comp;
+		}
+		else if(op == LE_OP){
+			result = attribute <= comp;			
+		}
+		else if(op == GT_OP){
+			result = attribute > comp;			
+		}
+		else if(op == GE_OP){
+			result = attribute >= comp;			
+		}
+		else if(op == NE_OP){
+			result = attribute != comp;			
+		}
+		else if(op == NO_OP){
+			result = true;			
+		}
+	}
+	else if(type == TypeVarChar){
+		int atLength = *(int *)at;
+		int compLength = *(int *)compVal;
+		string attribute((char *)at+sizeof(int), atLength);
+		string comp((char *)compVal+sizeof(int), atLength);
+		
+		if(op == EQ_OP){
+			result = (strcmp(attribute.c_str(), comp.c_str()) == 0);
+		}
+		else if(op == LT_OP){
+			result = (strcmp(attribute.c_str(), comp.c_str()) < 0);
+		}
+		else if(op == LE_OP){
+			result = (strcmp(attribute.c_str(), comp.c_str()) <= 0);			
+		}
+		else if(op == GT_OP){
+			result = (strcmp(attribute.c_str(), comp.c_str()) > 0);			
+		}
+		else if(op == GE_OP){
+			result = (strcmp(attribute.c_str(), comp.c_str()) >= 0);			
+		}
+		else if(op == NE_OP){
+			result = (strcmp(attribute.c_str(), comp.c_str()) != 0);		
+		}
+		else if(op == NO_OP){
+			result = true;			
+		}		
+		
+	}
+	return result;
+}
+
+
+
+
