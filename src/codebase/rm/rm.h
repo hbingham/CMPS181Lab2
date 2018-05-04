@@ -47,6 +47,9 @@ public:
 
   RC readTuple(const string &tableName, const RID &rid, void *data);
 
+  RC saveTable(int tableId, const string &name, int sysFlag);
+  RC saveTableColumns(int tableId, const vector<Attribute> &recordDescriptor);
+
   // Print a tuple that is passed to this utility method.
   // The format is the same as printRecord().
   RC printTuple(const vector<Attribute> &attrs, const void *data);
@@ -70,6 +73,7 @@ protected:
 private:
   static RelationManager *_rm;
 
+  int nextTid;
   PagedFileManager *pfm;
   RecordBasedFileManager *rbfm;
 
