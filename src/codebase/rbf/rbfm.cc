@@ -500,12 +500,15 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
                 }
                 break;
         default:    memset(((char*) pageData + sizeof(SlotDirectoryHeader) + rid.slotNum * sizeof(SlotDirectoryRecordEntry)), 0, sizeof(SlotDirectoryRecordEntry));
-        //memset:: set the bytes of the block that are the size of a SlotDirectoryRecordEntry to 0, starting at page + SlotDirectoryHeader + slotNum * the size of a SlotDirectoryRecordEntry
-        //fillHoles gets called here.
+                    fillHoles(pageData);
                     break;
     }
 
-/*
+        //memset:: set the bytes of the block that are the size of a SlotDirectoryRecordEntry to 0, starting at page + SlotDirectoryHeader + slotNum * the size of a SlotDirectoryRecordEntry
+
+
+
+/*****************************************************************************************************
     if(recordEntry.length == 0 && recordEntry.offset == 0)
     {
         free(pageData);
@@ -530,7 +533,7 @@ RC RecordBasedFileManager::deleteRecord(FileHandle &fileHandle, const vector<Att
             memset(((char*) page + sizeof(SlotDirectoryHeader) + rid.slotNum * sizeof(SlotDirectoryRecordEntry)), 0, sizeof(SlotDirectoryRecordEntry));
             //fillHoles
     }
-*/
+*********************************************************************************************************/
 
     returnCode = fileHandle.writePage(rid.pageNum, pageData);
     free(pageData);
@@ -649,34 +652,42 @@ RC RecordBasedFileManager::readAttribute(FileHandle &fileHandle, const vector<At
         return readAttribute(fileHandle, recordDescriptor, thisRID, attributeName, data);
     }
 
-    /**********************************************************************************************************
-    Get offset to record
     unsigned offset = recordEntry.offset;
-    // Get index and type of attribute
-    auto pred = [&](Attribute a) {return a.name == attributeName;};
-    auto iterPos = find_if(recordDescriptor.begin(), recordDescriptor.end(), pred);
-    unsigned index = distance(recordDescriptor.begin(), iterPos);
+
+    //Get index and type of attribute
+    //from stackoverflow::https://stackoverflow.com/questions/14225932/search-for-a-struct-item-in-a-vector-by-member-data
+    //auto pred = [&](Attribute attr) {return attr.name == attributeName;};
+
+
+
+    auto indexPos = find_if(recordDescriptor.begin(), recordDescriptor.end(), attrExists);
+    unsigned index = distance(recordDescriptor.begin(), indexPos);
+
     if (index == recordDescriptor.size())
-        return RBFM_NO_SUCH_ATTR;
+    {
+        return -1;
+    }
+
     AttrType type = recordDescriptor[index].type;
-    // Write attribute to data
+
     getAttributeFromRecord(pageData, offset, index, type, data);
     free(pageData);
-return SUCCESS;
-
-
-
-
-
-    *************************************************************************************************************/
-
-
-
-
-
-    return -1;
+    
+    return SUCCESS;
 }
-
+bool RecordBasedFileManager::attrExists(const vector<Attribute> &recordDescriptor, const string &attributeName)
+{
+    bool exists = false;
+    for(int i = 0; i < recordDescriptor.size(); i++)
+    {
+        Attribute attr = recordDescriptor[i];
+        if(attr.name == attributeName)
+        {
+            exists = true;
+        }
+    }
+    return exists;
+}
 void RecordBasedFileManager::fillHoles(void *page)
 {
    SlotDirectoryHeader header = getSlotDirectoryHeader(page);

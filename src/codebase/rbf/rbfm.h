@@ -184,6 +184,8 @@ private:
 
   void setRecordAtOffset(void *page, unsigned offset, const vector<Attribute> &recordDescriptor, const void *data);
   void getRecordAtOffset(void *record, unsigned offset, const vector<Attribute> &recordDescriptor, void *data);
+
+  bool attrExists(const vector<Attribute> &recordDescriptor, const string &attributeName);
 };
 
 #endif

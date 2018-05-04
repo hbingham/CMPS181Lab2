@@ -1,5 +1,6 @@
 
 #include "rm.h"
+#include <iostream>
 
 RelationManager* RelationManager::_rm = 0;
 
@@ -11,7 +12,7 @@ RelationManager* RelationManager::instance()
     return _rm;
 }
 
-RelationManager::RelationManager()
+RelationManager::RelationManager() : tableCounter(1)
 {
     pfm = PagedFileManager::instance();
     rbfm = RecordBasedFileManager::instance();
@@ -67,6 +68,18 @@ RelationManager::RelationManager()
     attr.length = 4;
     attr.type = TypeInt;
     column.push_back(attr);
+
+    if (doesExist("Tables.tbl")) 
+    {
+        load();
+    }
+    else 
+    {
+      createTable("Tables", table, "System");
+      createTable("Columns", column, "System");
+    }
+
+    
     
 }
 
@@ -92,9 +105,13 @@ RC RelationManager::deleteCatalog()
 RC RelationManager::createTable(const string &tableName, const vector<Attribute> &attrs)
 {
 
+
+/*
     RC returnCode;
     RC thisReturnCode;
     FileHandle fileHandle;
+    RID thisRID;
+
     //Initialized this in the constructor, not sure if I need it again?
     //RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
 
@@ -104,11 +121,31 @@ RC RelationManager::createTable(const string &tableName, const vector<Attribute>
       return returnCode;
     }
 
+//Find the largest tableID, so we can create a table at that value + 1
     thisReturnCode = rbfm->openFile("Tables.t", fileHandle);
     if(thisReturnCode)
     {
       return thisReturnCode;
     }
+
+    vector<string> attributes;
+    attributes.push_back("table-id");
+    RBFM_ScanIterator RBFMscanIterator;
+    thisReturnCode = rbfm->scan(fileHandle, tableDescriptor, "table-id", NO_OP, NULL, attributes, RBFMscanIterator);
+    if(thisReturnCode)
+    {
+      return thisReturnCode;
+    }
+
+    void *thisData = malloc(5); //size of an int, + 1
+    int tableID = 0;
+    char nullChar;
+*/
+
+
+
+
+
 
 
 
@@ -166,6 +203,97 @@ RC RelationManager::scan(const string &tableName,
 {
     return -1;
 }
+RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
+{
+    return rbfm_scanIterator.getNextRecord(rid, data);
+}
 
+RC RM_ScanIterator::close()
+{
+    RecordBasedFileManager *rbfm = RecordBasedFileManager::instance();
+    rbfm->closeFile(fileHandle);
+    return SUCCESS;
+}
+RC RelationManager::load() 
+{
+
+  RM_ScanIterator rmScanIterator;
+  vector <string> attributeName;
+  RID thisRID;
+
+  //tableID
+  attributeName.push_back(table[0].name);
+  //tableName
+  attributeName.push_back(table[1].name);
+
+  scan("Tables", table[0].name, NO_OP, NULL, attributeNames, rmScanIterator);
+
+  //Max table record size.
+  char *data = (char*) malloc(768);
+  char *BOF = data;
+
+  int maxTable = 0;
+  int tableID = 0;
+
+  while(rmScanIterator.getNextTuple(thisRID, data) != RM_EOF) 
+  {
+    memcpy(&tableID, data, sizeof(int));
+
+    int tableNameLength;
+    data = data + sizeof(int); //jump the length
+    memcpy(&tableNameLength, data, sizeof(int));
+
+    data = data + sizeof(int);
+    string tableName = string(data, tableNameLength);
+
+    if(tableId > maxTable)
+      maxTable = tableId;
+
+    map<int, RID> * tableIDToRidMap = new map<int, RID> ();
+    (*tableIDToRidMap)[tableId] = rid;
+
+    tablesMap[tableName] = tableIDToRidMap;
+    data = BOF;
+  }
+
+  tableCounter = maxTableID + 1; //get the max and add 1
+  rmScanIterator.close();
+
+  attributeName.clear();
+  attributeName.push_back(column[0].name); //table id
+  attributeName.push_back(column[4].name); //column position
+  scan("Columns", column[0].name, NO_OP, NULL, attributeName, rmScanIterator);
+
+  int columnPos;
+  while (rmScanIterator.getNextTuple(thisRID, data) != RM_EOF) 
+  {
+    memcpy(&tableId, data, sizeof(int));
+
+    data = data + sizeof(int);
+    memcpy(&columnPos, data, sizeof(int));
+
+    if (columnsMap.find(tableId) != columnsMap.end()) {
+      (*columnsMap[tableId])[columnPosition] = rid;
+    } else {
+      map<int, RID> * colEntryMap = new map<int, RID> ();
+      (*colEntryMap)[columnPosition] = rid;
+      (columnsMap[tableId]) = colEntryMap;
+    }
+
+    data = beginOfData;
+  }
+  rmsi.close();
+
+  attributeNames.clear();
+
+  return 0;
+}
+
+//returns true if the file exists, else returns false.
+bool RelationManager::doesExist(string fileName)
+{
+  struct stat buf;
+  return (stat(fileName.c_str(), &buf) == 0);
+}
 
 
